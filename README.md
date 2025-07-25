@@ -28,7 +28,7 @@ Proyek ini merupakan sistem **monitoring pupuk otomatis berbasis IoT** untuk bud
 ### 1. Clone repositori
 
 ```bash
-git clone https://github.com/username/iterahero-melon-iot.git
+https://github.com/krossmanzs/ITERAHERO-Smart-Melon-Farming-Lamtim.git
 cd iterahero-melon-iot
 ```
 
