@@ -53,8 +53,8 @@ def tampilkan_dan_simpan_data():
     vref_ph = read_reference_voltage()
 
     # XY-MD02
-    suhu_xy = read_temperature()
-    humidity = read_humidity()
+    suhu_xy = read_temperature(4)
+    humidity = read_humidity(4)
 
     # Flow
     flow = read_flowrate(1)

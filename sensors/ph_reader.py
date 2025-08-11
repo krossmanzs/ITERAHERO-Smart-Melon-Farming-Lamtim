@@ -16,14 +16,14 @@ from datetime import datetime
 # 28.6 = 1.7527 V
 
 # Kalibrasi suhu berbasis tegangan ADC
-voltase_temp_kalibrasi = np.array([1.9463,1.2711,2.2788,1.7527,2.4798,2.2164,2.1930,1.5421, 1.5527,1.5952,2.0195])  # Ubah dengan datamu
-suhu_kalibrasi = np.array([36,19.3,51,28.6,61,48,45,18.8, 20.9,22.3,41])               # Dari alat kalibrator
+voltase_temp_kalibrasi = np.array([1.9463,1.2711,2.2788,1.7527,2.4798,2.2164,2.1930,1.5421, 1.5527,1.5952,2.0195, 1.8])  # Ubah dengan datamu
+suhu_kalibrasi = np.array([36,19.3,51,28.6,61,48,45,18.8, 20.9,22.3,41, 6.97])               # Dari alat kalibrator
 
 a_temp, b_temp, c_temp = np.polyfit(voltase_temp_kalibrasi, suhu_kalibrasi, 2) 
 
 
-voltase_kalibrasi = np.array([1.0960,1.2346, 1.1685, 1.0916, 1.6869, 2.0811])  # Ubah dengan nilai kamu
-ph_kalibrasi = np.array([2.99,3.58, 3.26, 2.83, 6.57, 8.97])          # Ubah dengan nilai kamu
+voltase_kalibrasi = np.array([1.0960,1.2346, 1.1685, 1.0916, 1.6869, 2.1687, 2.1565])  # Ubah dengan nilai kamu
+ph_kalibrasi = np.array([2.99,3.58, 3.26, 2.83, 6.57, 8.76, 8.69])          # Ubah dengan nilai kamu
 
 # Hitung koefisien regresi linier: y = a * x + b
 a, b = np.polyfit(voltase_kalibrasi, ph_kalibrasi, 1)
@@ -61,20 +61,36 @@ def get_temp_from_voltage(voltage):
 
 # Fungsi pembacaan pH
 def read_ph():
-    voltage = chan_ph.voltage
-    ph = get_ph_from_voltage(voltage)
-    return ph
+    try:
+        voltage = chan_ph.voltage
+        ph = get_ph_from_voltage(voltage)
+
+        if ph < 1 or ph > 14:
+            raise ValueError(f"Nilai pH tidak wajar: {ph}")
+
+        return ph
+    except Exception as e:
+        print(f"❌ Gagal membaca pH: {e}")
+        return None
 
 
-# Fungsi pembacaan suhu (sensor 4–20 mA)
+# Fungsi pembacaan suhu
 def read_temp():
-    voltage = chan_temp.voltage
-    temp_c = get_temp_from_voltage(voltage)
-    return temp_c
+    try:
+        voltage = chan_temp.voltage
+        return get_temp_from_voltage(voltage)
+    except Exception as e:
+        print(f"❌ Gagal membaca suhu pH: {e}")
+        return None
 
 # Fungsi pembacaan referensi
 def read_reference_voltage():
-    return round(chan_ref.voltage, 3)
+    try:
+        return round(chan_ref.voltage, 3)
+    except Exception as e:
+        print(f"⚠️ Gagal membaca Vref: {e}")
+        return None
+
 
 # Logging CSV
 filename = "log_sensor.csv"

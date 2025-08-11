@@ -28,13 +28,22 @@ GPIO.add_event_detect(FLOW_SENSOR_PIN, GPIO.FALLING, callback=count_pulse)
 def read_flowrate(duration=1):
     global pulse_count
     pulse_count = 0
-    time_start = time.time()
+    try:
+        time_start = time.time()
+        time.sleep(duration)
+        elapsed = time.time() - time_start
 
-    time.sleep(duration)
+        if elapsed == 0:
+            raise Exception("Durasi 0")
 
-    elapsed = time.time() - time_start
-    flow_rate = (pulse_count / CALIBRATION_FACTOR) / elapsed * 60.0
-    return round(flow_rate, 2)
+        if pulse_count == 0:
+            return "OFF"  # sensor aktif tapi tidak ada aliran
+
+        flow = (pulse_count / CALIBRATION_FACTOR) / elapsed * 60.0
+        return round(flow, 2)
+    except Exception as e:
+        print(f"❌ Gagal membaca flowrate: {e}")
+        return None
 
 # Contoh penggunaan
 if __name__ == "__main__":

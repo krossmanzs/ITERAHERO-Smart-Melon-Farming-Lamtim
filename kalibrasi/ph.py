@@ -23,7 +23,7 @@ ads.gain = 1  # ±4.096V, cukup untuk sensor pH 4–20 mA
 chan_ph = AnalogIn(ads, ADS1115.P0)  # A0: Sensor pH melalui resistor 150Ω
 
 # File CSV
-filename = "tekanan_ph_voltage_6_57.csv"
+filename = "tekanan_ph_voltage_8_68.csv"
 header = ["Waktu", "Voltase pH (V)"]
 
 # Jumlah pembacaan dan jeda antar pembacaan

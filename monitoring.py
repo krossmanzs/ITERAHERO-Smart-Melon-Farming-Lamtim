@@ -1,4 +1,5 @@
 # monitoring.py
+import paho.mqtt.client as mqtt
 
 from PIL import Image, ImageTk
 import tkinter as tk
@@ -11,6 +12,35 @@ from sensors.ph_reader import read_ph, read_temp as read_ph_temp
 from sensors.temp_reader import read_temperature
 from sensors.tds_reader import read_tds
 from sensors.waterflow import read_flowrate
+from actuators.pump import start_pump_listener, cleanup_pump
+
+
+unacked_publish = set()
+
+def on_publish(client, userdata, mid, reason_code, properties):
+    try:
+        userdata.remove(mid)
+    except KeyError:
+        print("⚠️ mid tidak ditemukan saat on_publish (race condition mungkin terjadi)")
+
+# Konfigurasi MQTT
+MQTT_BROKER = "168.231.119.199"         # Ganti jika broker di device lain
+MQTT_PORT = 1883
+MQTT_CLIENT_ID = "agro-lestari-smart-farming-publisher"
+MQTT_TOPICS = {
+    "ph": "iterahero/lamtim/sensor/sensor-zbgh/data",
+    "temp": "iterahero/lamtim/sensor/sensor-esxf/data",
+    "tds": "iterahero/lamtim/sensor/sensor-rm9f/data",
+    "flow": "iterahero/lamtim/sensor/sensor-7j1f/data",
+    "panel_temp": "iterahero/lamtim/sensor/sensor-hsbc/data",
+    "water_temp": "iterahero/lamtim/sensor/sensor-wzp0/data"
+}
+
+mqttc = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2)
+mqttc.on_publish = on_publish
+mqttc.user_data_set(unacked_publish)
+mqttc.connect(MQTT_BROKER, MQTT_PORT, 60)
+mqttc.loop_start()
 
 # Warna latar
 ACTIVE_BG = "#D0F5E2"
@@ -86,40 +116,74 @@ def update_sensor(card, value, unit):
         for child in widget.winfo_children():
             child.config(bg=bg)
 
+def publish(topic, value):
+    try:
+        msg_info = mqttc.publish(topic, payload=str(value), qos=1, retain=True)
+        unacked_publish.add(msg_info.mid)
+        msg_info.wait_for_publish()
+        print(f"📤 MQTT → {topic}: {value}")
+    except Exception as e:
+        print(f"❌ MQTT gagal kirim ke {topic}: {e}")
+
+
 # Loop update sensor
 def sensor_loop():
     while True:
         try:
-            update_sensor(ph_card, str(read_ph()), "pH")
+            ph = read_ph()
+            if ph is None:
+                update_sensor(ph_card, "OFF", "pH")
+            else:
+                update_sensor(ph_card, str(ph), "pH")
+                publish(MQTT_TOPICS["ph"], ph)
         except Exception as e:
             print(f"[ERR] pH: {e}")
             update_sensor(ph_card, "ERR", "pH")
 
         try:
-            suhu = read_temperature()
+            suhu = read_temperature(4, False)
+            print(f"[DEBUG] Nilai suhu terbaca: {suhu}")  # DEBUG
             if suhu is None:
-                suhu = read_ph_temp()
-            update_sensor(temp_card, str(round(suhu, 1)), "°C")
+                update_sensor(temp_card, "OFF", "°C")
+            else:
+                update_sensor(temp_card, str(round(suhu, 1)), "°C")
+                publish(MQTT_TOPICS["temp"], round(suhu, 1))
         except Exception as e:
             print(f"[ERR] Suhu: {e}")
             update_sensor(temp_card, "ERR", "°C")
+            
+        try:
+            suhu = read_temperature(2, False)
+            print(f"[DEBUG] Nilai suhu terbaca: {suhu}")  # DEBUG
+            if suhu is not None:
+                publish(MQTT_TOPICS["panel_temp"], round(suhu, 1))
+        except Exception as e:
+            print(f"[ERR] Suhu: {e}")
 
         try:
             tds_result = read_tds()
             if tds_result:
                 update_sensor(tds_card, str(tds_result["tds"]), "ppm")
+                publish(MQTT_TOPICS["tds"], tds_result["tds"])
             else:
                 update_sensor(tds_card, "OFF", "ppm")
         except Exception as e:
             print(f"[ERR] TDS: {e}")
             update_sensor(tds_card, "ERR", "ppm")
-
+            
         try:
-            flow = read_flowrate(1)
-            update_sensor(flow_card, str(flow), "L/min")
+            water_temp = read_ph_temp()
+            print(f"[DEBUG] Nilai suhu terbaca: {water_temp}")  # DEBUG
+            if water_temp is None:
+                update_sensor(water_temp_card, "OFF", "°C")
+            else:
+                update_sensor(water_temp_card, str(round(water_temp, 1)), "°C")
+                publish(MQTT_TOPICS["water_temp"], round(water_temp, 1))
         except Exception as e:
-            print(f"[ERR] Flowrate: {e}")
-            update_sensor(flow_card, "ERR", "L/min")
+            print(f"[ERR] Suhu Panel: {e}")
+            update_sensor(water_temp_card, "ERR", "°C")
+
+
 
         time.sleep(3)
 
@@ -142,18 +206,23 @@ grid.pack(expand=True, fill="both", padx=20, pady=10)
 grid.columnconfigure((0, 1), weight=1)
 grid.rowconfigure((0, 1), weight=1)
 
-ph_card = create_sensor_card(grid, "Non-AKTIF", "Sensor pH", "---", "pH", "./icons/icon_ph.png")
+ph_card = create_sensor_card(grid, "Non-AKTIF", "pH", "---", "", "./icons/icon_ph.png")
 ph_card["frame"].grid(row=0, column=0, sticky="nsew", padx=10, pady=10)
 
-temp_card = create_sensor_card(grid, "Non-AKTIF", "Sensor Suhu", "---", "°C", "./icons/icon_temp.png")
+temp_card = create_sensor_card(grid, "Non-AKTIF", "Suhu Ruang", "---", "°C", "./icons/icon_temp.png")
 temp_card["frame"].grid(row=0, column=1, sticky="nsew", padx=10, pady=10)
 
-tds_card = create_sensor_card(grid, "Non-AKTIF", "Sensor TDS", "---", "ppm", "./icons/icon_tds.png")
+tds_card = create_sensor_card(grid, "Non-AKTIF", "TDS", "---", "ppm", "./icons/icon_tds.png")
 tds_card["frame"].grid(row=1, column=0, sticky="nsew", padx=10, pady=10)
 
-flow_card = create_sensor_card(grid, "Non-AKTIF", "Sensor Flow", "---", "L/min", "./icons/icon_flow.png")
-flow_card["frame"].grid(row=1, column=1, sticky="nsew", padx=10, pady=10)
+# flow_card = create_sensor_card(grid, "Non-AKTIF", "Sensor Flow", "---", "L/min", "./icons/icon_flow.png")
+# flow_card["frame"].grid(row=1, column=1, sticky="nsew", padx=10, pady=10)
+
+water_temp_card = create_sensor_card(grid, "Non-AKTIF", "Suhu Air", "---", "°C", "./icons/icon_temp.png")
+water_temp_card["frame"].grid(row=1, column=1, sticky="nsew", padx=10, pady=10)
 
 update_time()
 threading.Thread(target=sensor_loop, daemon=True).start()
+threading.Thread(target=start_pump_listener, daemon=True).start()
 root.mainloop()
+
