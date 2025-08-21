@@ -6,6 +6,7 @@ import tkinter as tk
 from datetime import datetime
 import threading
 import time
+import socket  # <— tambah: untuk cek internet
 
 # Impor dari sensors folder
 from sensors.ph_reader import read_ph, read_temp as read_ph_temp
@@ -45,6 +46,17 @@ mqttc.loop_start()
 # Warna latar
 ACTIVE_BG = "#D0F5E2"
 INACTIVE_BG = "#FDE1E1"
+
+# ==========================
+# Cek Internet
+# ==========================
+def has_internet(host="8.8.8.8", port=53, timeout=2.0):
+    """Return True jika koneksi internet tersedia (socket ke DNS Google)."""
+    try:
+        with socket.create_connection((host, port), timeout=timeout):
+            return True
+    except Exception:
+        return False
 
 # Fungsi membuat kartu sensor
 def create_sensor_card(frame, status, name, value, unit, icon_path, bg=ACTIVE_BG):
@@ -183,8 +195,6 @@ def sensor_loop():
             print(f"[ERR] Suhu Panel: {e}")
             update_sensor(water_temp_card, "ERR", "°C")
 
-
-
         time.sleep(3)
 
 # ====== UI Setup ======
@@ -192,13 +202,28 @@ root = tk.Tk()
 root.geometry("1024x600")
 root.title("Dashboard Sensor")
 
-header_label = tk.Label(root, font=("Arial", 12), anchor="w", padx=20, pady=10)
-header_label.pack(fill="x")
+# --- header: waktu (kiri) + status internet (kanan) ---
+header_frame = tk.Frame(root)
+header_frame.pack(fill="x")
+
+header_label = tk.Label(header_frame, font=("Arial", 12), anchor="w", padx=20, pady=10)
+header_label.pack(side="left", fill="x", expand=True)
+
+net_label = tk.Label(header_frame, font=("Arial", 12), anchor="e", padx=20, pady=10)
+net_label.pack(side="right")
 
 def update_time():
     now = datetime.now().strftime("%A, %d %B %Y, %H:%M:%S WIB")
     header_label.config(text=now)
     root.after(1000, update_time)
+
+def update_net_status():
+    online = has_internet()
+    net_label.config(
+        text=f"Internet: {'Tersambung' if online else 'Putus'}",
+        fg=("green" if online else "red")
+    )
+    root.after(2000, update_net_status)  # cek tiap 2 detik
 
 grid = tk.Frame(root)
 grid.pack(expand=True, fill="both", padx=20, pady=10)
@@ -222,7 +247,7 @@ water_temp_card = create_sensor_card(grid, "Non-AKTIF", "Suhu Air", "---", "°C"
 water_temp_card["frame"].grid(row=1, column=1, sticky="nsew", padx=10, pady=10)
 
 update_time()
+update_net_status()  # <— panggil scheduler status internet
 threading.Thread(target=sensor_loop, daemon=True).start()
 threading.Thread(target=start_pump_listener, daemon=True).start()
 root.mainloop()
-
